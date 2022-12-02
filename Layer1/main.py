@@ -11,7 +11,7 @@ import gc
 _debug = False
 
 sys_module = "L1"
-FW_ver = "1.0.1"
+FW_ver = "2.0.1"
 event_q = []
 rgbled = LED(LED.RGB)
 ledy = LED('ledy')
@@ -148,7 +148,7 @@ class SmartHome():
                     print('event_len=', len(event_q))
                 item = heapq.heappop(event_q)
                 if _debug:
-                    print(item)
+                    print('item=', item)
 
                 if item == 'KeyTone':
                     music.play(['C7:2'], loop=False)
@@ -224,6 +224,7 @@ class SmartHome():
         global event_q, music
         while True:
             BLEData = self.BLE.RecvData()
+
             if self.BLE.state == 'CONNECTED' and self.mode == 'board':
                 self.mode = 'Phone'
             elif self.BLE.state == 'DISCONNECTED':
@@ -232,84 +233,93 @@ class SmartHome():
             if self.mode == 'Phone':
                 if BLEData != '':
                     if _debug:
-                        print(BLEData)
+                        print('ble_data=', BLEData)
                     else:
                         await asyncio.sleep_ms(50)
                     if BLEData == 'GetBoard':
                         send = "Board,{},\n".format(sys_module)
                         if _debug:
-                            print(send)
+                            print('send_data=', send)
                         else:
                             await asyncio.sleep_ms(50)
                         self.BLE.SendData(send)
                         await asyncio.sleep_ms(100)
                         self.mode = 'Phone1'
+                    else:
+                        pass
+                        if _debug:
+                            print('BLEData != GetBoard -->', BLEData)
             elif self.mode == 'Phone1':
                 if BLEData != '':
                     if _debug:
-                        print(BLEData)
-                    else:
-                        await asyncio.sleep_ms(50)
-                    if BLEData == "LON":
-                        led_data = [[255, 255, 255 >> 3]]*12
-                        rgbled.rgb_write(led_data)
-                    elif BLEData == "LOFF":
-                        rgbled.off()
-                    elif BLEData == "COFF":
-                        await self.Motor_Ctrl('OFF')
-                    elif BLEData == "CON":
-                        await self.Motor_Ctrl('ON')
-                    elif BLEData == "recover":
-                        self.password = '1234'
-                    elif BLEData == "ring":
-                        heapq.heappush(event_q, 'Door')
-
-                    elif BLEData == "SetDoor":
-                        self.door_light_mode = True
-                    elif BLEData == "ClrDoor":
-                        self.door_light_mode = False
-
-                    elif "L3sec" in BLEData:
-                        await self.L3sec()
-                    elif BLEData == "Set_PWD_L":
-                        self.pwd_light_mode = True
-                    elif BLEData == "Clr_PWD_L":
-                        self.pwd_light_mode = False
-                    elif BLEData == "Set_PWD_C":
-                        self.pwd_curtain_mode = True
-                    elif BLEData == "Clr_PWD_C":
-                        self.pwd_curtain_mode = False
-
-                    elif BLEData == 'GetBoard':
-                        send = "Board,{},\n".format(sys_module)
+                        print("BLE_recv_data==", BLEData)
+                    data = BLEData.split(',')
+                    if len(data) > 1 and data[0] == 'M':
+                        dele_data = data.pop(0)
+                    print('data==', data)  # for test
+                    for BLEData in data:
                         if _debug:
-                            print(send)
-                        else:
-                            await asyncio.sleep_ms(50)
-                        self.BLE.SendData(send)
-                        await asyncio.sleep_ms(50)
-                    elif BLEData == 'DisConnect':
-                        self.BLE.disconnect()
-                        await asyncio.sleep_ms(50)
+                            print('cmd =', BLEData)
+                        if BLEData == "LON":
+                            led_data = [[255, 255, 255 >> 3]]*12
+                            rgbled.rgb_write(led_data)
+                        elif BLEData == "LOFF":
+                            rgbled.off()
+                        elif BLEData == "COFF":
+                            await self.Motor_Ctrl('OFF')
+                        elif BLEData == "CON":
+                            await self.Motor_Ctrl('ON')
+                        elif BLEData == "recover":
+                            self.password = '1234'
+                        elif BLEData == "ring":
+                            heapq.heappush(event_q, 'Door')
 
-                    if BLEData[0] == "@":
-                        self.password = BLEData[1:]
+                        elif BLEData == "SetDoor":
+                            self.door_light_mode = True
+                        elif BLEData == "ClrDoor":
+                            self.door_light_mode = False
+
+                        elif "L3sec" in BLEData:
+                            await self.L3sec()
+                        elif BLEData == "Set_PWD_L":
+                            self.pwd_light_mode = True
+                        elif BLEData == "Clr_PWD_L":
+                            self.pwd_light_mode = False
+                        elif BLEData == "Set_PWD_C":
+                            self.pwd_curtain_mode = True
+                        elif BLEData == "Clr_PWD_C":
+                            self.pwd_curtain_mode = False
+
+                        elif BLEData == 'GetBoard':
+                            send = "Board,{},\n".format(sys_module)
+                            if _debug:
+                                print('send_data=', send)
+                            else:
+                                await asyncio.sleep_ms(50)
+                            self.BLE.SendData(send)
+                            await asyncio.sleep_ms(50)
+                        elif BLEData == 'DisConnect':
+                            self.BLE.disconnect()
+                            await asyncio.sleep_ms(50)
+
+                        elif BLEData[0] == "@":
+                            self.password = BLEData[1:]
 
                 send = "Air,{},\n".format(self.in_gas_sensor_value)
                 self.BLE.SendData(send)
-                await asyncio.sleep_ms(50)
+                await asyncio.sleep_ms(10)
                 send = "Mic,{},\n".format(self.in_mic_sensor_value)
                 self.BLE.SendData(send)
-                await asyncio.sleep_ms(50)
+                await asyncio.sleep_ms(10)
                 send = "Light,{},\n".format(self.in_light_sensor)
                 self.BLE.SendData(send)
-                await asyncio.sleep_ms(50)
-                send = "VR,{},\n".format(self.in_light_ctrl_value)
-                self.BLE.SendData(send)
+                # await asyncio.sleep_ms(100)
+                # send = "VR,{},\n".format(self.in_light_ctrl_value)
+                # self.BLE.SendData(send)
             if music.getState() == 'STOP':
                 gc.collect()
             # print('free_mem=', gc.mem_free())
-            await asyncio.sleep_ms(100)
+            await asyncio.sleep_ms(10)
 
 
 timer = Timer(0)

@@ -26,6 +26,12 @@ V1.004 (2021.9.27)
 V1.100 (2022.1.1)
     - 更改廣播接收 資料格式 for Richlink RPi Gateway ，max group 20 , data is 8bit ASCII code  
 
+V1.110 (2022.11.2)
+    - 更改廣播傳送 資料格式 for Richlink RPi Gateway ，max group 20 , data is 8bit ASCII code  
+V1.111 (2022.11.22)
+    - fixed 廣播接收 filter name 無法呼叫
+V1.112 (2022.12.2)
+    - add 接收 去除 空白b'\x00'
 """
 from utime import sleep_ms as delay
 import utime
@@ -42,14 +48,13 @@ class GATT:
         self.AdvState = 0
         self.AdvScanState = 0
         self.AdvData = []
-        self.AdvDataHeader = '17FF5D00'
-        self.AdvDeviceName = "0609524C36324D"
-        self.ScanFilterName = ''
+        self.AdvDataHeader = '1709726C'  # 2022.1102 modify for epy adv mode
+        self.FilterName = 'rl'
         self.ble = uart
         self._init_RL62M()
         self.ChangeRole(role)
         self.ble.deinit()
-        self.ble.init(115200, timeout=20, read_buf_len=64)
+        self.ble.init(115200, timeout=20, read_buf_len=128)
 
     def __del__(self):
         self.ble.deinit()
@@ -65,11 +70,11 @@ class GATT:
             self.ble.write('AT\r\n')
             delay(50)
             msg = self.ble.read(self.ble.any())
-            if not msg:
+            if msg == None:
                 msg = ''
         self.MODE = 'CMD'
         msg = str(self.WriteCMD_withResp('AT+ADDR=?'), 'utf-8')
-        # print (msg)
+        #print (msg)
         self.mac = msg.strip().split(' ')[1]
 
         msg = self.WriteCMD_withResp('AT+EN_SYSMSG=?')
@@ -84,13 +89,13 @@ class GATT:
         self.ble.write(atcmd+'\r\n')
         delay(50)
         msg = self.ble.read(self.ble.any())
-        if not msg:
+        if msg == None:
             msg = ''
         if 'SYS-MSG: CONNECTED OK' in msg:
             self.state = 'CONNECTED'
         elif 'SYS-MSG: DISCONNECTED OK' in msg:
             self.state = 'DISCONNECTED'
-        if datamode:
+        if datamode == True:
             self.ChangeMode('DATA')
         return (msg)
 
@@ -115,9 +120,9 @@ class GATT:
             self.ble.write('!CCMD@')
             delay(200)
             msg = self.ble.readline()
-            if not msg:
+            if msg == None:
                 msg = ''
-            while 'SYS-MSG: CMD_MODE OK' not in msg:
+            while not 'SYS-MSG: CMD_MODE OK' in msg:
                 msg = self.ble.readline()
                 if msg == None:
                     msg = ''
@@ -125,8 +130,8 @@ class GATT:
             self.MODE = 'CMD'
         elif mode == 'DATA':
             msg = self.WriteCMD_withResp('AT+MODE_DATA')
-            while 'SYS-MSG: DATA_MODE OK' not in msg:
-                print('change to data mode fail')
+            while not 'SYS-MSG: DATA_MODE OK' in msg:
+                # print('change to data mode fail')
                 delay(100)
             self.MODE = 'DATA'
         else:
@@ -138,7 +143,7 @@ class GATT:
         return
 
     def RecvData(self):
-        msg = self.ble.readline()
+        msg = self.ble.readline().strip(b'x\00')
         if msg == None:
             msg = ''
         if len(msg) > 0:
@@ -173,28 +178,33 @@ class GATT:
                 msg = self.WriteCMD_withResp(
                     'AT+ROLE=C', timeout=1500)  # 1.5sec for epy ble v1.03
             if 'READY OK' not in msg:
-                print('Change Role fail ;', msg)
+                # print('Change Role fail ;', msg)
+                pass
 
             self.ROLE = role
             self.ChangeMode('DATA')
             return
 
-    def ScanConnect(self, mac='', name_header='EPY_', filter_rssi=100):
+    def ScanConnect(self, mac='', name_header='EPY_', filter_rssi=60):
         device = []
         if self.ROLE != 'CENTRAL':
             self.ChangeRole("CENTRAL")
         if mac == '':
             msg = str(self.WriteCMD_withResp(
                 'AT+SCAN_FILTER_RSSI={}'.format(filter_rssi)), 'utf-8')
+            msg = str(self.WriteCMD_withResp(
+                'AT+SCAN_FILTER_NAME={}'.format(name_header)), 'utf-8')
+            # print(msg)
             while len(device) == 0:
                 msg = str(self.WriteCMD_withResp(
                     'AT+SCAN', timeout=5000), 'utf-8')
-                msg = msg. split('\r\n')
+                msg = msg.split('\r\n')
                 for dev in msg:
                     sdev = dev.split(' ')
                     if len(sdev) == 5:
                         device.append(sdev)
-            sorted(device, key=lambda x: int(x[3]), reverse=True)
+            sorted(device, key=lambda x: int(x[3]), reverse=False)
+            # print(device)
             msg = self.WriteCMD_withResp(
                 'AT+CONN={}'.format(device[0][0]))
         else:
@@ -219,7 +229,7 @@ class GATT:
             delay(100)
         return
 
-    def SetAdvInterval_ms(self, time_ms=200):
+    def SetAdvInterval_ms(self, time_ms=50):
         # 50/100/200/500/1000/2000/5000/10000/20000/50000
         self.EnableAdvMode(enable=0)
 
@@ -239,8 +249,8 @@ class GATT:
         return
 
     def SetAdvData(self):
-        data = self.AdvDataHeader+''.join(self.AdvData)+self.AdvDeviceName
-        print(data)
+        data = self.AdvDataHeader+''.join(self.AdvData)
+        # print(data)
         msg = self.WriteCMD_withResp(
             'AT+AD_SET=0,{}'.format(data))
         return
@@ -265,11 +275,11 @@ class GATT:
         self.SetAdvData()
         self.EnableAdvMode(enable=1)
 
-    def AdvScanFilterName(self, name='rl'):
-        if self.ScanFilterName != name:
+    def ScanFilterName(self, name='rl'):
+        if self.FilterName != name:
             msg = self.WriteCMD_withResp('AT+SCAN_FILTER_NAME={}'.format(name))
             if "OK" in msg:
-                self.ScanFilterName = name
+                self.FilterName = name
 
     def AdvRecvData(self, group=0, who_mac='None'):
         if who_mac == 'None':
@@ -278,16 +288,11 @@ class GATT:
         if self.ROLE != 'CENTRAL':
             self.ChangeRole("CENTRAL")
         self.EnableAdvScan(enable=1)
-        self.AdvScanFilterName()
+        self.ScanFilterName()
         msg = str(self.ble.readline(), 'utf-8')
         if len(msg) > 0:
             msg = msg.strip()
             msg = str(msg).split(' ')
-
-            # check ADV_DATA and mac address in ADV data
-            # 代辦事項 +check header  過濾 name = rl
-            # 廣播發送資料格式如下
-            # 1709726c  42310000000000000000 00000000000000000000
             if len(msg) < 4:
                 return (None)
             if 'ADV_DATA' in msg[0] and who_mac in msg[1]:

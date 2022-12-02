@@ -124,11 +124,9 @@ class SmartHome2F:
         global event_q
         while True:
             gc.collect()
-            # if _debug:
-            #     print(gc.mem_free())
 
             BLEData = self.BLE.RecvData()
-
+                
             if self.BLE.state == 'CONNECTED' and self.mode == 'board':
                 self.mode = 'Phone'
             elif self.BLE.state == 'DISCONNECTED':
@@ -149,53 +147,55 @@ class SmartHome2F:
             elif self.mode == 'Phone1':
                 if BLEData != '':
                     if _debug:
-                        print(BLEData)
-                    else:
-                        # print(BLEData)
-                        pass
-                        # await asyncio.sleep_ms(50)
-                    if BLEData == "LON":
-                        color1 = [
-                            [coolor_dict['Green'][0], coolor_dict['Green'][1], coolor_dict['Green'][2]]] * 10
-                        rgbled.rgb_write(color1)
-                    elif BLEData == "LOFF":
-                        rgbled.off()
-                    elif BLEData == "M2OFF":
-                        self.outside_fan.CW(0)
-                    elif BLEData == "M2ON":
-                        self.outside_fan.CW(100)
-                    elif BLEData == "M1OFF":
-                        self.inside_fan.CC(0)
-                    elif BLEData == "M1ON":
-                        self.inside_fan.CC(80)
-                    elif BLEData == "L3sec":
-                        heapq.heappush(event_q, 'L3sec')
-                    elif BLEData == "M1_3sec":
-                        heapq.heappush(event_q, 'M1_3sec')
-                    elif BLEData == 'GetBoard':
-                        send = "Board,{},\n".format(sys_module)
-                        if _debug:
-                            print(send)
-                        self.BLE.SendData(send)
-                        await asyncio.sleep_ms(50)
-                    elif BLEData == 'DisConnect':
-                        self.BLE.disconnect()
+                        print('BLE_recv_data ==',BLEData)
+                    data = BLEData.split(',')
+                    if len(data) > 1 and data[0] == 'M':
+                        dele_data = data.pop(0)
+                    for cmd in data:
+                        if _debug :
+                            print ('cmd =',cmd)
+                        if cmd == "LON":
+                            color1 = [
+                                [coolor_dict['Green'][0], coolor_dict['Green'][1], coolor_dict['Green'][2]]] * 10
+                            rgbled.rgb_write(color1)
+                        elif cmd == "LOFF":
+                            rgbled.off()
+                        elif cmd == "M2OFF":
+                            self.outside_fan.CW(0)
+                        elif cmd == "M2ON":
+                            self.outside_fan.CW(100)
+                        elif cmd == "M1OFF":
+                            self.inside_fan.CC(0)
+                        elif cmd == "M1ON":
+                            self.inside_fan.CC(80)
+                        elif cmd == "L3sec":
+                            heapq.heappush(event_q, 'L3sec')
+                        elif cmd == "M1_3sec":
+                            heapq.heappush(event_q, 'M1_3sec')
+                        elif cmd == 'GetBoard':
+                            send = "Board,{},\n".format(sys_module)
+                            if _debug:
+                                print(send)
+                            self.BLE.SendData(send)
+                            await asyncio.sleep_ms(50)
+                        elif cmd == 'DisConnect':
+                            self.BLE.disconnect()
 
                 send = "TEMP,{},\n".format(self.in_temper)
                 if _debug:
                     print(send)
                 self.BLE.SendData(send)
-                await asyncio.sleep_ms(50)
+                await asyncio.sleep_ms(100)
                 send = "HUMI,{},\n".format(self.in_humi)
                 # if _debug:
                 #     print(send)
                 self.BLE.SendData(send)
-                await asyncio.sleep_ms(50)
+                await asyncio.sleep_ms(100)
                 send = "Det,{},\n".format(self.detecter_pin.value())
                 # if _debug:
                 #     print(send)
                 self.BLE.SendData(send)
-                await asyncio.sleep_ms(50)
+                await asyncio.sleep_ms(100)
             await asyncio.sleep_ms(10)
 
 

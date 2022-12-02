@@ -1,7 +1,7 @@
 from machine import Pin, Timer
 import utime
 import math
-import _thread
+import uasyncio as asyncio
 
 
 class Music:
@@ -19,13 +19,11 @@ class Music:
         self._state = 'STOP'
         self.loop = False
         self.music = []
-        _thread.start_new_thread(self.play_music, ())
 
-    def play_music(self):
+    async def play_music(self):
         while True:
             if self._state == "START":
                 for play_tone in self.music:
-                    #print ('-')
                     if self._state == "STOP":
                         break
                     play_tone = play_tone.split(":")
@@ -44,16 +42,18 @@ class Music:
                         if(len(play_tone) == 2):
                             self._ticks = (60000/((self.bpm)*self.ticks)
                                            )*(int(play_tone[1]))
-                        self._playFreq(playFreq, int(self._ticks))
+                        await self._playFreq(playFreq, int(self._ticks))
                     except KeyError:
-                        print("tone not find")
+                        #print("tone not find")
                         self._state = "STOP"
-                if self.loop and self._state != "STOP":
-                    self._state = "START"
-                else:
+                        self.music = []
+                if not self.loop or self._state == "STOP":
                     self._state = "STOP"
                     self.music = []
-        # utime.sleep(0.1)
+            else:
+                self._state = "STOP"
+                self.music = []
+            await asyncio.sleep_ms(10)
 
     def tempo(self, ticks=4, bpm=120):
         self.ticks = ticks
@@ -64,31 +64,26 @@ class Music:
 
     def stop(self):
         self._state = "STOP"
-        while self.music:
-            pass
+        self.music = []
 
     def getState(self):
         return self._state
 
     def play(self, music, loop=False):
-        if self._state == "START":
+        while self._state == "START":
             self.stop()
         self.music = music
         self.loop = loop
         self._state = "START"
 
-    def playFreq(self, playFreq, playtime_ms):
+    async def playFreq(self, playFreq, playtime_ms):
         if self._state == 'STOP':
             self._state = 'START'
-            self._playFreq(playFreq, playtime_ms)
+            await self._playFreq(playFreq, playtime_ms)
             self._state = 'STOP'
 
-    def _playFreq(self, playFreq, playtime_ms):
+    async def _playFreq(self, playFreq, playtime_ms):
         self._timer.init(freq=int(playFreq*2))
         self._timer.callback(self._buzzer_toggle)
-        preTime = utime.ticks_ms()
-        while (utime.ticks_ms() - preTime) < (playtime_ms):
-            utime.sleep_ms(1)
+        await asyncio.sleep_ms(playtime_ms)
         self._timer.callback(None)
-
-
